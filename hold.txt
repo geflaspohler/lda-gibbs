@@ -1,0 +1,120 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def sample_index(p):
+    """
+    Sample from a multinomial distrubtion and return the sample index
+    An experiment with one of p possible outcomes, drawing n samples 
+    The values of the returned list X_i = [X_0, X_1, ... X_p] represent
+    the number of times the outcome was i
+    """
+    #np.random.multinomial(number of experiments, probabilities of each outcome)
+    distribution = np.random.multinomial(1,p);
+    #argmax returns the index of the largest element
+    return distribution.argmax();
+
+def gen_document(word_dist, n_topics, vocab_size, length=DOCUMENT_LENGTH, alpha=0.1):
+    """
+    Describes the generative process by which documents are formed:
+        1) Sample topic proporations from the Dirichlet distribution
+        2) Sample a topic index from the mulitnomial with topic proportions from 1
+        3) Same a word from the mulinomial corresponding to the topic index from 2
+        4) Repeat on 2 while you need more words
+
+    """
+    #Alpha parameter is an array, k dimension for sample of dimension k
+    theta = np.random.mtrnad.dirichlet([alpha*n_topics])
+    #Creates an array of zeros the size of the vocab
+    v = np.zeros(vocab_size) 
+
+    for n in xrange(length):
+        z = sample_index(theta)
+        w = sample_index(word_dist[z,:])
+        v[w] += 1 #Add one to the word count for the generated word
+    
+    return v
+
+
+def gen_word_distribution(n_topics, document_length):
+    """
+    Generate a word distribution for each of the n_topics.
+    """
+    width = n_topics / 2
+    vocab_size = width ** 2
+    m = np.zeros((n_topics, vocab_size))
+
+    for k in range(width):
+        m[k,:] = vertical_topic(width, k, document_length)
+        print m
+
+    for k in range(width):
+        m[k+width,:] = horizontal_topic(width, k, document_length)
+        print m 
+
+    print "Before:", m
+    m /=m.sum(axis=1)[:, np.newaxis] # turn counts into probabilities
+
+    return m
+
+def vertical_topic(width, topic_index, document_length):
+    """
+    Generate a topic whose words form a vertical bar
+    """
+    m = np.zeros((width, width))
+
+    #I think this is just a random number to initialze a topic with
+    m[:, topic_index] = int(document_length/width)
+
+    return m.flatten()
+    """
+    The returned distribution will look like, where * = doc_len/width
+    
+    |*  *  *  * 
+    -------------
+
+    There is a * every width indecies, starting at topic index
+    The length of the resulting array is width ** 2
+
+    """
+
+def horizontal_topic(width, topic_index, document_length):
+    """
+    Generate a topic whose words form a horizontal bar
+    """
+    m = np.zeros((width,width))
+
+    m[topic_index, :] = int(document_length/width)
+    
+    return m.flatten();
+
+    """
+    The returned distribution will look like, where * = doc_len/width
+    
+    |    ***** 
+    -------------
+
+    There is a clump of * , 
+    The length of the resulting array is width ** 2
+
+    """
+

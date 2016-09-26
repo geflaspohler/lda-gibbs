@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import re
 from stop_words import get_stop_words
+from os import listdir 
+from os.path import isfile, join, isdir 
 
 def sample_index(p):
     """
@@ -95,7 +97,7 @@ class lda_gibbs_sampler(object):
         p_z /= np.sum(p_z);
         return p_z;
 
-    def run(self, matrix, max_iterations = 1000):
+    def run(self, matrix, max_iterations = 10):
         """
         Run the Gibbs sampler
         """
@@ -147,11 +149,34 @@ class lda_gibbs_sampler(object):
 """
 Initialize the document from text file
 """
-N_TOPICS = 2;
+
+N_TOPICS = 5;
 documents = [];
 W_sub = [];
 V = {}; I = {};
 count = 0;
+
+for dirs in listdir('./bbc'):
+    if isdir(join('./bbc',dirs)):
+        for files in listdir('./bbc/'+dirs):
+            if(isfile(join('./bbc/'+dirs, files))):
+                filename = './bbc/' + dirs + '/' + files
+                f = open(filename, 'r');
+                en_stop = get_stop_words('en');
+
+                for line in f:
+                    wordList = re.sub("[^\w]", " ",  line).split()
+                    wordList =  [i for i in wordList if not i in en_stop]
+                    for word in wordList:
+                        W_sub.append(word);
+                        if (word not in V) and (word not in en_stop):
+                            V[word] = count; 
+                            I[count] = word;
+                            count += 1;
+
+                documents.append(W_sub);
+                W_sub = [];
+"""
 f = open('corpus.txt', 'r');
 en_stop = get_stop_words('en');
 for line in f:
@@ -165,6 +190,8 @@ for line in f:
             count += 1;
     documents.append(W_sub);
     W_sub = [];
+
+"""
 
 """
 Create a matrix such that:

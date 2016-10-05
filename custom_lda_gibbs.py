@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import scipy as sp
 import pylab
@@ -8,6 +9,7 @@ import re
 from stop_words import get_stop_words
 from os import listdir 
 from os.path import isfile, join, isdir 
+import string
 
 def sample_index(p):
     """
@@ -30,14 +32,26 @@ def word_indices(vector):
             yield word_index
             #Yeild causes a tempory list to be built; we only need it once 
 
+def log_multi_beta(alpha, K=None):
+    """
+    Logarithm of the multinomial beta function.
+    """
+    if K is None:
+        # alpha is assumed to be a vector
+        return np.sum(gammaln(alpha)) - gammaln(np.sum(alpha))
+    else:
+        # alpha is assumed to be a scalar
+        return K * gammaln(alpha) - gammaln(K*alpha)
+
 class lda_gibbs_sampler(object):
 
-    def __init__(self, n_topics, alpha = 0.1, beta = 0.1):
+    def __init__(self, n_topics, alpha = 0.001, beta = 0.000001):
         """
         n_topics: the desired number of topics
         alpha: a scalar
         beta: a scalar
         """
+        self.prev_like = -10000000;
         self.num_topics = n_topics;
         self.alpha = alpha;
         self.beta = beta;
@@ -58,8 +72,8 @@ class lda_gibbs_sampler(object):
         self.n_zw = np.zeros((self.num_topics, vocab_size));
 
         # Sums
-        self.n_m = np.zeros((num_docs,1));#total_words_in_document 
-        self.n_z = np.zeros((self.num_topics,1));#total_words_in_topic 
+        self.n_m = np.zeros(num_docs);#total_words_in_document 
+        self.n_z = np.zeros(self.num_topics);#total_words_in_topic 
         self.topics = {};
 
         for m_i, cur_doc in enumerate(documents):#for all documents
@@ -89,15 +103,42 @@ class lda_gibbs_sampler(object):
 
         # TODO: check the sum(self.n_zw stuff)
         left = (self.n_zw[:,w] + self.beta) / \
-                (sum(self.n_zw[:,w]) + self.beta*vocab_size);
+                (self.n_zw[:,w] + self.beta*vocab_size);
         right = (self.n_mz[m,:] + self.alpha) / \
                 (self.n_m[m] + self.alpha * self.num_topics);
         p_z = left * right;
         # Normalize
         p_z /= np.sum(p_z);
         return p_z;
+    
+    def loglikelihood(self):
+        """
+        Compute the likelihood that the model generated the data.
+        """
+        vocab_size = self.n_zw.shape[1]
+        n_docs = self.n_mz.shape[0]
+        lik = 0
 
-    def run(self, matrix, max_iterations = 10):
+        for z in xrange(self.num_topics):
+            lik += log_multi_beta(self.n_zw[z,:]+self.beta)
+            lik -= log_multi_beta(self.beta, vocab_size)
+
+        for m_i in xrange(n_docs):
+            lik += log_multi_beta(self.n_mz[m_i,:]+self.alpha)
+            lik -= log_multi_beta(self.alpha, self.num_topics)
+
+        return lik
+
+    def phi(self):
+        """
+        Compute phi = p(w|z).
+        """
+        V = self.n_zw.shape[1]
+        num = self.n_zw + self.beta
+        num /= np.sum(num, axis=1)[:, np.newaxis]
+        return num
+
+    def run(self, matrix, max_iterations = 50):
         """
         Run the Gibbs sampler
         """
@@ -122,76 +163,121 @@ class lda_gibbs_sampler(object):
                     self.n_zw[z][w] += 1;
                     self.n_z[z] += 1;
                     self.topics[(m_i,n)] = z;
+
+            likelihood = sampler.loglikelihood();
+            print "Iteration", iteration
+            print "Likelihood", likelihood
+            #if(likelihood - self.prev_like < 0):
+                #break;
+            self.prev_like = likelihood;
    
 
     def print_data(self):
         num_topics, num_words = self.n_zw.shape;
         num_docs, num_topics = self.n_mz.shape;
+
         for topic_index in xrange(num_topics):
             print "====== Topic", topic_index, "======="
             word_count_pairs = enumerate(self.n_zw[topic_index,:]);
             sorted_list = sorted(word_count_pairs, \
                 key = lambda tup: tup[1], reverse=True);
-    
+  
+            loop = 0;
             for index, count in sorted_list:
                 if count > 0:
                     print I[index], count,
+                if loop > 10:
+                    break;
+                loop += 1;
 
             print
-
+        """
         for document_index in xrange(num_docs):
             print "====== Doc", document_index, "======="
             for t_i, topic in enumerate(self.n_mz[document_index,:]):
                 print topic,
             print
+        """
         print
                 
 """
 Initialize the document from text file
 """
 
-N_TOPICS = 5;
-documents = [];
+
+word2Index = {};
+vocabulary = [];
+vocabSize = 0;
+N_TOPICS = int(sys.argv[1])
+stopWrods = get_stop_words('en');
+
+"""documents = [];
 W_sub = [];
 V = {}; I = {};
-count = 0;
+count = 0;"""
 
-for dirs in listdir('./bbc'):
-    if isdir(join('./bbc',dirs)):
-        for files in listdir('./bbc/'+dirs):
-            if(isfile(join('./bbc/'+dirs, files))):
-                filename = './bbc/' + dirs + '/' + files
-                f = open(filename, 'r');
-                en_stop = get_stop_words('en');
+mode = "SIMPLE";
+
+if mode == "COMPLEX":
+    dir_list = ['./bbc/sport', './bbc/politics'];
+    for dirs in dir_list:
+        for files in listdir(dirs):
+            if(isfile(join(dirs, files))):
+                filename = dirs + '/' + files
+                #f = open(filename, 'r');
+                words.
 
                 for line in f:
                     wordList = re.sub("[^\w]", " ",  line).split()
                     wordList =  [i for i in wordList if not i in en_stop]
                     for word in wordList:
-                        W_sub.append(word);
-                        if (word not in V) and (word not in en_stop):
-                            V[word] = count; 
-                            I[count] = word;
+                        word_lc = string.lower(word);
+                        W_sub.append(word_lc);
+                        if (word_lc not in V) and (word_lc not in en_stop):
+                            V[word_lc] = count; 
+                            I[count] = word_lc;
                             count += 1;
 
                 documents.append(W_sub);
                 W_sub = [];
-"""
-f = open('corpus.txt', 'r');
-en_stop = get_stop_words('en');
-for line in f:
-    wordList = re.sub("[^\w]", " ",  line).split()
-    wordList =  [i for i in wordList if not i in en_stop]
-    for word in wordList:
-        W_sub.append(word);
-        if (word not in V) and (word not in en_stop):
-            V[word] = count; 
-            I[count] = word;
-            count += 1;
-    documents.append(W_sub);
-    W_sub = [];
 
 """
+#for dirs in listdir('./bbc'):
+    #if isdir(join('./bbc',dirs)):
+    for files in listdir('./bbc/' + dirs):
+        if(isfile(join('./bbc/'+dirs, files))):
+            filename = './bbc/' + dirs + '/' + files
+            f = open(filename, 'r');
+            en_stop = get_stop_words('en');
+
+            for line in f:
+                wordList = re.sub("[^\w]", " ",  line).split()
+                wordList =  [i for i in wordList if not i in en_stop]
+                for word in wordList:
+                    W_sub.append(word);
+                    if (word not in V) and (word not in en_stop):
+                        V[word] = count; 
+                        I[count] = word;
+                        count += 1;
+
+            documents.append(W_sub);
+            W_sub = [];
+"""
+if mode == "SIMPLE":
+    f = open('corpus.txt', 'r');
+    en_stop = get_stop_words('en');
+    for line in f:
+        wordList = re.sub("[^\w]", " ",  line).split()
+        wordList =  [i for i in wordList if not i in en_stop]
+        for word in wordList:
+            word_lc = string.lower(word);
+            W_sub.append(word_lc);
+            if (word_lc not in V) and (word_lc not in en_stop):
+                V[word_lc] = count; 
+                I[count] = word_lc;
+                count += 1;
+        documents.append(W_sub);
+        W_sub = [];
 
 """
 Create a matrix such that:
@@ -203,9 +289,12 @@ documents   |
                     V
 """
 matrix = np.zeros((len(documents), len(V)));
+en_stop = get_stop_words('en');
 for m_i, doc in enumerate(documents):
     for word in doc:
-        matrix[m_i][V[word]] += 1;
+        word_lc = string.lower(word);
+        if word_lc not in en_stop:
+            matrix[m_i][V[word_lc]] += 1;
 
 sampler = lda_gibbs_sampler(N_TOPICS);
 sampler.run(matrix);

@@ -10,6 +10,7 @@ from stop_words import get_stop_words
 from os import listdir 
 from os.path import isfile, join, isdir 
 import string
+import copy
 
 def sample_index(p):
     """
@@ -45,13 +46,13 @@ def log_multi_beta(alpha, K=None):
 
 class lda_gibbs_sampler(object):
 
-    def __init__(self, n_topics, alpha = 0.001, beta = 0.000001):
+    def __init__(self, n_topics, alpha = 0.0001, beta = 0.000001):
         """
         n_topics: the desired number of topics
         alpha: a scalar
         beta: a scalar
         """
-        self.prev_like = -10000000;
+        self.best_like = -10000000;
         self.num_topics = n_topics;
         self.alpha = alpha;
         self.beta = beta;
@@ -68,8 +69,10 @@ class lda_gibbs_sampler(object):
 
         #Number of times document and topic z co-occur
         self.n_mz = np.zeros((num_docs,self.num_topics));
+        self.best_n_mz = np.zeros((num_docs,self.num_topics));
         #Number of times topic z and word w co-occur
         self.n_zw = np.zeros((self.num_topics, vocab_size));
+        self.best_n_zw = np.zeros((self.num_topics, vocab_size));
 
         # Sums
         self.n_m = np.zeros(num_docs);#total_words_in_document 
@@ -166,138 +169,144 @@ class lda_gibbs_sampler(object):
 
             likelihood = sampler.loglikelihood();
             print "Iteration", iteration
+            f.write("Iteration {0}".format(iteration));
             print "Likelihood", likelihood
-            #if(likelihood - self.prev_like < 0):
-                #break;
-            self.prev_like = likelihood;
+            f.write("Likelihood {0}".format(likelihood));
+            if(likelihood > self.best_like):
+                self.best_n_mz = copy.copy(self.n_mz)
+                self.best_n_zw = copy.copy(self.n_zw)
+                self.best_like = likelihood;
+
    
 
     def print_data(self):
-        num_topics, num_words = self.n_zw.shape;
-        num_docs, num_topics = self.n_mz.shape;
+        num_topics, num_words = self.best_n_zw.shape;
+        num_docs, num_topics = self.best_n_mz.shape;
 
+        print "Final likelihood:", self.best_like
+        f.write("Final likelihood: {0}".format(self.best_like));
         for topic_index in xrange(num_topics):
             print "====== Topic", topic_index, "======="
-            word_count_pairs = enumerate(self.n_zw[topic_index,:]);
+            f.write("====== Topic {0} =======".format(topic_index));
+
+            for z in xrange(num_topics):
+                if np.sum(self.best_n_zw[z,:]) > 0:
+                    self.best_n_zw[z, :] /= np.sum(self.best_n_zw[z, :]); 
+            for m in xrange(num_docs):
+                if np.sum(self.best_n_mz[m,:]) > 0:
+                    self.best_n_mz[m, :] /= np.sum(self.best_n_mz[m, :]);
+
+            word_count_pairs = [(vocabulary[w], self.best_n_zw[topic_index,w]) for w in range(vocabSize)];
             sorted_list = sorted(word_count_pairs, \
                 key = lambda tup: tup[1], reverse=True);
   
             loop = 0;
             for index, count in sorted_list:
                 if count > 0:
-                    print I[index], count,
+                    print index , '(%.4f),' %count,
+                    f.write("{0}, ({1})".format(index, '(%.4f),' %count))
                 if loop > 10:
                     break;
                 loop += 1;
-
             print
+            f.write('\n');
         """
         for document_index in xrange(num_docs):
             print "====== Doc", document_index, "======="
-            for t_i, topic in enumerate(self.n_mz[document_index,:]):
-                print topic,
+            f.write("====== Doc", document_index, "=======")
+            for t_i, topic in enumerate(self.best_n_mz[document_index,:]):
+                print t_i, '(%.4f),' %topic,
+                f.write(t_i, '(%.4f),' %topic,)
             print
-        """
+            f.write('\n');
         print
+        f.write('\n');
+        """
                 
 """
 Initialize the document from text file
 """
 
+def readFile(filename):
+    global vocabSize, vocabulary
+    words = file(filename).read().lower().split();
+    words = [w for w in words if w.isalpha() and w not in stopWords];
+
+    tokens = [];
+    
+    # Create a mapping for words to indicies
+    for w in words:
+        if w not in word2Index:
+            word2Index[w] = vocabSize;
+            vocabulary.append(w);
+            vocabSize += 1;
+
+        tokens.append(word2Index[w]);
+
+    return tokens
+
+def readSimple(filename):
+    global vocabSize, vocabulary
+
+    f = open(filename, 'r');
+    for line in f:
+        words = re.sub("[^\w]", " ",  line).lower().split();
+        words = [w for w in words if w.isalpha() and w not in stopWords];
+
+        tokens = [];
+        
+        # Create a mapping for words to indicies
+        for w in words:
+            if w not in word2Index:
+                word2Index[w] = vocabSize;
+                vocabulary.append(w);
+                vocabSize += 1;
+
+            tokens.append(word2Index[w]);
+
+        documents.append(tokens);
+    return documents 
 
 word2Index = {};
 vocabulary = [];
 vocabSize = 0;
 N_TOPICS = int(sys.argv[1])
-stopWrods = get_stop_words('en');
+n_iters = int(sys.argv[2])
+stopWords = get_stop_words('en');
+mode = "COMPLEX";
+documents = [];
 
-"""documents = [];
-W_sub = [];
-V = {}; I = {};
-count = 0;"""
 
-mode = "SIMPLE";
+if __name__ == '__main__':
+    if mode == "COMPLEX":
+        for dirs in listdir('./bbc'):
+            if isdir(join('./bbc',dirs)):
+                for files in listdir('./bbc/' + dirs):
+                    if(isfile(join('./bbc/'+dirs, files))):
+                        filename = './bbc/' + dirs + '/' + files
+                        tokens = readFile(filename);
+                        documents.append(tokens);
 
-if mode == "COMPLEX":
-    dir_list = ['./bbc/sport', './bbc/politics'];
-    for dirs in dir_list:
-        for files in listdir(dirs):
-            if(isfile(join(dirs, files))):
-                filename = dirs + '/' + files
-                #f = open(filename, 'r');
-                words.
+    if mode == "SIMPLE":
+        documents = readSimple('corpus.txt');
 
-                for line in f:
-                    wordList = re.sub("[^\w]", " ",  line).split()
-                    wordList =  [i for i in wordList if not i in en_stop]
-                    for word in wordList:
-                        word_lc = string.lower(word);
-                        W_sub.append(word_lc);
-                        if (word_lc not in V) and (word_lc not in en_stop):
-                            V[word_lc] = count; 
-                            I[count] = word_lc;
-                            count += 1;
+    """
+    Create a matrix such that:
+                | entires are counts of each vocabulary word in each document
+    documents   |
+    M         |
+                |______________
+                    vocabulary
+                        V
+    """
+    f = open("results.txt", 'wb');
+    matrix = np.zeros((len(documents), len(vocabulary)));
+    for m_i, doc in enumerate(documents):
+        for word in doc:
+            matrix[m_i][word] += 1;
 
-                documents.append(W_sub);
-                W_sub = [];
+    sampler = lda_gibbs_sampler(N_TOPICS);
+    sampler.run(matrix, n_iters);
 
-"""
-#for dirs in listdir('./bbc'):
-    #if isdir(join('./bbc',dirs)):
-    for files in listdir('./bbc/' + dirs):
-        if(isfile(join('./bbc/'+dirs, files))):
-            filename = './bbc/' + dirs + '/' + files
-            f = open(filename, 'r');
-            en_stop = get_stop_words('en');
-
-            for line in f:
-                wordList = re.sub("[^\w]", " ",  line).split()
-                wordList =  [i for i in wordList if not i in en_stop]
-                for word in wordList:
-                    W_sub.append(word);
-                    if (word not in V) and (word not in en_stop):
-                        V[word] = count; 
-                        I[count] = word;
-                        count += 1;
-
-            documents.append(W_sub);
-            W_sub = [];
-"""
-if mode == "SIMPLE":
-    f = open('corpus.txt', 'r');
-    en_stop = get_stop_words('en');
-    for line in f:
-        wordList = re.sub("[^\w]", " ",  line).split()
-        wordList =  [i for i in wordList if not i in en_stop]
-        for word in wordList:
-            word_lc = string.lower(word);
-            W_sub.append(word_lc);
-            if (word_lc not in V) and (word_lc not in en_stop):
-                V[word_lc] = count; 
-                I[count] = word_lc;
-                count += 1;
-        documents.append(W_sub);
-        W_sub = [];
-
-"""
-Create a matrix such that:
-            | entires are counts of each vocabulary word in each document
-documents   |
-  M         |
-            |______________
-                vocabulary
-                    V
-"""
-matrix = np.zeros((len(documents), len(V)));
-en_stop = get_stop_words('en');
-for m_i, doc in enumerate(documents):
-    for word in doc:
-        word_lc = string.lower(word);
-        if word_lc not in en_stop:
-            matrix[m_i][V[word_lc]] += 1;
-
-sampler = lda_gibbs_sampler(N_TOPICS);
-sampler.run(matrix);
-
-sampler.print_data();
+    sampler.print_data();
 

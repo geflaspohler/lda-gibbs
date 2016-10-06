@@ -1,0 +1,14 @@
+rm 1**.txt
+rm 2**.txt
+rm 3**.txt
+rm 4**.txt
+rm 5**.txt
+rm 01*.txt
+rm 02*.txt
+rm 03*.txt
+rm 04*.txt
+rm 05*.txt
+rm 06*.txt
+rm 07*.txt
+rm 08*.txt
+rm 09*.txt

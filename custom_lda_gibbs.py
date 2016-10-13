@@ -46,11 +46,11 @@ def log_multi_beta(alpha, K=None):
 
 class lda_gibbs_sampler(object):
 
-    def __init__(self, n_topics, alpha = 0.0001, beta = 0.000001):
+    def __init__(self, n_topics, alpha = 1, beta = 0.0001):
         """
         n_topics: the desired number of topics
-        alpha: a scalar
-        beta: a scalar
+        alpha: a scalar for document topic density
+        beta: a scalar for topic word density
         """
         self.best_like = -10000000;
         self.num_topics = n_topics;
@@ -185,6 +185,10 @@ class lda_gibbs_sampler(object):
 
         print "Final likelihood:", self.best_like
         f.write("Final likelihood: {0}".format(self.best_like));
+        print self.n_mz;
+        print self.n_zw;
+
+
         for topic_index in xrange(num_topics):
             print "====== Topic", topic_index, "======="
             f.write("====== Topic {0} =======".format(topic_index));
@@ -205,7 +209,7 @@ class lda_gibbs_sampler(object):
                 if count > 0:
                     print index , '(%.4f),' %count,
                     f.write("{0}, ({1})".format(index, '(%.4f),' %count))
-                if loop > 10:
+                if loop > 20:
                     break;
                 loop += 1;
             print
@@ -213,15 +217,16 @@ class lda_gibbs_sampler(object):
         """
         for document_index in xrange(num_docs):
             print "====== Doc", document_index, "======="
-            f.write("====== Doc", document_index, "=======")
+            f.write("====== Doc {0} =======".format(document_index));
             for t_i, topic in enumerate(self.best_n_mz[document_index,:]):
                 print t_i, '(%.4f),' %topic,
-                f.write(t_i, '(%.4f),' %topic,)
+                f.write("{0}, ({1})".format(t_i, '(%.4f),' %topic))
             print
             f.write('\n');
         print
         f.write('\n');
         """
+
                 
 """
 Initialize the document from text file
@@ -273,6 +278,7 @@ vocabSize = 0;
 N_TOPICS = int(sys.argv[1])
 n_iters = int(sys.argv[2])
 stopWords = get_stop_words('en');
+#mode = "SIMPLE";
 mode = "COMPLEX";
 documents = [];
 
